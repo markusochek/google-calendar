@@ -1,7 +1,7 @@
 const express = require('express')
-const { getEvents, addEvent } = require("./backend/service");
-
 const expressFileUpload = require('express-fileupload');
+
+const { getEvents, addEvent } = require("./backend/service");
 
 const app = express();
 
@@ -12,11 +12,11 @@ app.use(express.static('frontend'));
 
 //backend
 app.get('/api/', (req, res) => {
-    getEvents().then(response => res.send(JSON.stringify(response)))
+    getEvents().then(response => res.send(response))
 });
 
 app.post("/api/createEvent",(req,res)=>{
-    addEvent(req.files.file).then(response => res.send(JSON.stringify(response)))
+    addEvent(req.files.file).then(response => res.send(response))
 })
 
 app.listen(3000);

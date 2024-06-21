@@ -1,6 +1,7 @@
 const fs = require('fs')
+const csvParser = require("csv-parser");
 const {google} = require('googleapis')
-const parse = require('csv-parse')
+const { Event } = require('.././frontend/entities/Event')
 
 const GOOGLE_PROJECT_NUMBER = "go-calendar-427007"
 const GOOGLE_CALENDAR_ID = "60cc845aa7a6bb49efd6a54c6a05e869ae6fa175bc05c1774ed997e06701527b@group.calendar.google.com"
@@ -23,6 +24,11 @@ const calendar = google.calendar({
     auth: jwtClient
 })
 
+const authentication = new google.auth.GoogleAuth({
+    keyFile: 'backend/credentials.json',
+    scopes: 'https://www.googleapis.com/auth/calendar',
+});
+
 const getEvents = async () => {
     calendar.events.list({
         calendarId: GOOGLE_CALENDAR_ID,
@@ -44,56 +50,46 @@ const getEvents = async () => {
 }
 
 const addEvent = async (file) => {
-    let rows = file.data.split("\n")
-    // let headers = rows[0].split(";")
-    let events = []
+    fs.writeFile('backend/files/' + file.name, file.data, (err) => {
+        if (err) throw new Error()
+    })
 
-    const authentication = new google.auth.GoogleAuth({
-        keyFile: 'backend/credentials.json',
-        scopes: 'https://www.googleapis.com/auth/calendar',
-    });
+    //костыльно поправить бы
+    let promise =  new Promise((resolve, reject) => fs.createReadStream('backend/files/' + file.name)
+        .pipe(csvParser({separator: ';'}))
+        .on("data", (event) => {
+            let eventFull = {
+                'summary': event.summary,
+                'description': event.description,
+                'start': {
+                    'dateTime': new Date(event.startDateTime),
+                    'timeZone': 'Europe/Samara',
+                },
+                'end': {
+                    'dateTime': new Date(event.endDateTime),
+                    'timeZone': 'Europe/Samara',
+                },
+                'reminders': {
+                    'useDefault': false,
+                    'overrides': [
+                        {'method': 'email', 'minutes': 24 * 60},
+                        {'method': 'popup', 'minutes': 10},
+                    ],
+                },
+            }
 
-    for (let i = 1; i < rows.length; i++) {
-        let cells = rows[i].split(";")
-
-        events.push({
-            'summary': cells[0],
-            'location': 'Hyderabad,India',
-            'description': cells[1],
-            'start': {
-                'dateTime': cells[2],
-                'timeZone': 'Asia/Dhaka',
-            },
-            'end': {
-                'dateTime': cells[3],
-                'timeZone': 'Asia/Dhaka',
-            },
-            'reminders': {
-                'useDefault': false,
-                'overrides': [
-                    {'method': 'email', 'minutes': 24 * 60},
-                    {'method': 'popup', 'minutes': 10},
-                ],
-            },
-        })
-    }
-
-    authentication.getClient().then(auth=>{
-        events.forEach((event) => {
-            calendar.events.insert({
-                auth: auth,
-                calendarId: GOOGLE_CALENDAR_ID,
-                resource: event,
-            }, function(err, event) {
-                if (err) {
-                    console.log('There was an error contacting the Calendar service: ' + err)
-                    return
-                }
-                // console.log('Event created: %s', event.data)
-                return { message: "Event successfully created!" }
+            authentication.getClient().then(auth=>{
+                calendar.events.insert({
+                    auth: auth,
+                    calendarId: GOOGLE_CALENDAR_ID,
+                    resource: eventFull,
+                }, function(err, event) {
+                    if (err) throw new Error(err)
+                })
             })
         })
-    })
+        .on("end", () => { resolve()}))
+    return { message: "Events successfully created! Please check your google calendar" }
 }
 
 module.exports = { getEvents, addEvent }
